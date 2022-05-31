@@ -41,7 +41,7 @@ contract FlightSuretyApp {
 
   // Events definition for insurance lifecycle
   event InsurancePurchased(address indexed insuree);
-  event InsuranceCredited(address indexed insuree);
+  event InsuranceCredited(string flightId);
   event InsuranceWithdrawn(address indexed insuree);
 
   // Event definition for flight registered
@@ -91,6 +91,10 @@ contract FlightSuretyApp {
   constructor(address data) public {
     contractOwner = msg.sender;
     dataContract = FlightSuretyData(data);
+
+    // First airline could be initialized in here. We have built into the dapp UI all of the required
+    // fields for registering airlines and flights so we are not hardcoding any information 
+    // at the moment of contract deployment
   }
 
   /**
@@ -107,8 +111,9 @@ contract FlightSuretyApp {
   * @dev Sets contract operations on/off
   *
   * When operational mode is disabled, all write transactions except for this one will fail
+  / we could add multi-party consensus in here, for the porpuse of this exercise we use multi-party
+  / only for approving airlines - operational status remains available only to the contract owner
   */    
-  // TODO: Add multi-party consensus in here
   function setOperatingStatus (bool mode) external requireContractOwner {
     operational = mode;
   }
@@ -122,7 +127,7 @@ contract FlightSuretyApp {
 
   /**
   /@dev returns if an aairline is a Candidate
-    */
+  */
   function isCandidate(address _address) private view returns (bool) {
     if (!dataContract.isAirline(_address)) return false;
     uint state = dataContract.getAirlineState(_address);
@@ -131,7 +136,7 @@ contract FlightSuretyApp {
 
   /**
   /@dev returns if an airline is Approved
-    */
+  */
   function isApproved(address _address) private view returns (bool) {
     if (!dataContract.isAirline(_address)) return false;
     uint state = dataContract.getAirlineState(_address);
@@ -139,8 +144,8 @@ contract FlightSuretyApp {
   }
 
   /**
-  /@dev returns if an airline is a Funded
-    */
+  /@dev returns if an airline is Funded
+  */
   function isFunded(address _address) public view returns (bool) {
     if (!dataContract.isAirline(_address)) return false;
     uint state = dataContract.getAirlineState(_address);
@@ -203,7 +208,6 @@ contract FlightSuretyApp {
     // Register the vote from the caller
     multiCalls[_airline].push(msg.sender);
 
-    // TODO: This should be based on registerd airlines - Maybe we define Approved Airlines can upvote
     // Calculates the required consensus from the total number of funded airlines
     uint requiredConsensus = fundedCounter.div(2);
 
@@ -279,10 +283,12 @@ contract FlightSuretyApp {
   }
 
   /**
-  / @dev executes the busniess logic for calculating the insurance amount
-    */
-  function calculateInsurance(uint256 _amount) internal pure returns (uint256 _value) {
-    return _amount.mul(15).div(10);
+  / @dev executes the busniess logic for calculating the insurance amount. 
+  / This could be modified by consensus or by replacing the App Contract in the future. 
+  */
+  function calculateInsurance(uint256 amount) internal pure returns (uint256 value) {
+    value = amount.mul(3).div(2);
+    return value;
   }
 
   /**
@@ -314,7 +320,7 @@ contract FlightSuretyApp {
         }
       }else {
         // calculates the insurance amount from the value sent
-        insuranceAmount = calculateInsurance(msg.value);
+        insuranceAmount = calculateInsurance(MAX_INSURANCE_AMOUNT);//msg.value);
 
         // buys the insurance in the data contract
         if (dataContract.buy(msg.sender, _airline, flightId, msg.value,  insuranceAmount)) {
@@ -327,17 +333,27 @@ contract FlightSuretyApp {
 
       return false;
   }
+
+  /**
+  /@dev returns insuree balance - this method is available only to the contract owner.
+  / In the context of this exercise this is used during testing.
+   */
+  function getAnyBalance (address insuree) external requireIsOperational requireContractOwner returns(uint256){
+    uint256 balance = dataContract.getBalance(insuree);
+    return balance;
+  }
   
   /**
-  /@dev returns paseenger balance
+  /@dev returns insuree balance 
    */
-  function getBalance () external
-    requireIsOperational {
-      dataContract.getBalance(msg.sender);
+  function getBalance () external requireIsOperational returns(uint256){
+    uint256 balance = dataContract.getBalance(msg.sender);
+    return balance;
   }
 
   /**
   * @dev withdraws all of the available amount for the insuree
+  / Functionality could be added to receive the amount of ether to withdraw
   */
   function withdraw () external
     requireIsOperational {
@@ -345,8 +361,9 @@ contract FlightSuretyApp {
   }
 
   /**
-  /@dev fetches the airline information
-    */
+  /@dev fetches the airline information, returns the name, state and a user friendly state name
+  / to display in the dapp UI
+  */
   function fetchAirline() external view returns (string name, uint state, string stateName) {
     (name, state) = dataContract.getAirline(msg.sender);
     if (state == 0) stateName = "Unregistered";
@@ -358,14 +375,17 @@ contract FlightSuretyApp {
   }
 
   /**
-  /@dev returns the number of flights registerd by the called
+  /@dev returns the number of flights registerd by the called - This is so we can return an array
+  / of flight information. In current version of solidity we can not return an array which contains a field
+  / of type string, so this approach allow us to receive the number of flights registered, so then we can
+  / iterate and request each flight by index
    */
   function registerdFlightsCount() external requireIsOperational returns (uint256 count) {
     return dataContract.flightsPerAirlineCount(msg.sender);
   }
 
   /**
-  /@dev returns the flight data given a flight id
+  /@dev returns the flight data given a flight index - this is used in combination with the method above
    */
   function getFlightByIndex(uint256 index) external requireIsOperational returns (string flight, uint256 timestamp) {
     (flight, timestamp) = dataContract.getFlight(msg.sender, index);
@@ -374,29 +394,43 @@ contract FlightSuretyApp {
 
   /**
   * @dev Called after oracle has updated flight status
+  * This function is trigegred when the oracle responses reach a consensus
+  * for the status of a flight
   */  
   function processFlightStatus (
     address airline, 
     string memory flight, 
     uint256 timestamp, 
     uint8 statusCode) internal {
-      // This function is trigegred when the oracle comes back with a status code of the response
 
+      // If the status of the flight is delayed by the airline we need to credit
+      // insurance to all of the insurees for this flight
       if (statusCode == STATUS_CODE_LATE_AIRLINE) {
         bytes32 flightId = getFlightKey(airline, flight, timestamp);
 
         dataContract.creditInsurees(flightId);
-        // address[] storage insurees = dataContract.creditInsurees(flightId);
 
-        // for (uint i=0; i < insurees.length; i++) {
-        //     // Emits an event for each insuree credited
-        //     emit InsuranceCredited(insurees[i]);
-        // }
+        // emits the events that insurance has been credited for the flight
+        emit InsuranceCredited(flight);
       }
+  }
+
+  /**
+  /@dev this method is available only for the contract owner so we can complete tests
+  / without the need of an oracle. It allows us to credit insurance for a flight
+  / without requiring the oracles to submit the flight status
+  */
+  function creditInsurance(address airline, 
+    string flight, 
+    uint256 timestamp) external requireIsOperational requireContractOwner {
+      bytes32 flightId = getFlightKey(airline, flight, timestamp);
+
+      dataContract.creditInsurees(flightId);
   }
 
 
   // Generate a request for oracles to fetch flight information
+  // This method is called from the dapp upon user request
   function fetchFlightStatus (
     address airline,
     string flight, 
@@ -485,6 +519,7 @@ contract FlightSuretyApp {
     string flight,
     uint256 timestamp,
     uint8 statusCode ) external {
+      
       require((oracles[msg.sender].indexes[0] == index) || (oracles[msg.sender].indexes[1] == index) || (oracles[msg.sender].indexes[2] == index), "Index does not match oracle request");
 
       bytes32 key = keccak256(abi.encodePacked(index, airline, flight, timestamp)); 
@@ -495,7 +530,11 @@ contract FlightSuretyApp {
       // Information isn't considered verified until at least MIN_RESPONSES
       // oracles respond with the *** same *** information
       emit OracleReport(airline, flight, timestamp, statusCode);
+
       if (oracleResponses[key].responses[statusCode].length >= MIN_RESPONSES) {
+
+        oracleResponses[key].isOpen = false;
+
         emit FlightStatusInfo(airline, flight, timestamp, statusCode);
 
         // Handle flight status as appropriate

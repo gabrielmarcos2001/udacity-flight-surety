@@ -3,9 +3,13 @@ import DOM from './dom';
 import Contract from './contract';
 import './flightsurety.css';
 
-
 (async() => {
-    let result = null;
+    const STATUS_CODE_UNKNOWN = 0;
+    const STATUS_CODE_ON_TIME = 10;
+    const STATUS_CODE_LATE_AIRLINE = 20;
+    const STATUS_CODE_LATE_WEATHER = 30;
+    const STATUS_CODE_LATE_TECHNICAL = 40;
+    const STATUS_CODE_LATE_OTHER = 50;
     let contract = new Contract('localhost', () => {
 
         contract.subscribeToEvents((event) => {
@@ -16,6 +20,29 @@ import './flightsurety.css';
 
             // After 3 seconds, remove the show class from DIV
             setTimeout(function(){ snackbar.className = snackbar.className.replace("show", ""); }, 3000);
+
+            // If the event received is the status info and the state of the event is the Ariline Delay we need
+            // to process the insurance
+            if (event.event == 'FlightStatusInfo' ) {
+                if (event.returnValues.status == STATUS_CODE_UNKNOWN) {
+                    DOM.elid("passenger-flight-status").textContent = "Flight Status is Unknown";
+                }
+                if (event.returnValues.status == STATUS_CODE_ON_TIME) {
+                    DOM.elid("passenger-flight-status").textContent = "Flight Status is On Time";
+                }
+                if (event.returnValues.status == STATUS_CODE_LATE_AIRLINE) {
+                    DOM.elid("passenger-flight-status").textContent = "Flight Status is Delayed by Airline - Passengeres Insurance was credited";
+                }
+                if (event.returnValues.status == STATUS_CODE_LATE_WEATHER) {
+                    DOM.elid("passenger-flight-status").textContent = "Flight Status is delayed by weather";
+                }
+                if (event.returnValues.status == STATUS_CODE_LATE_TECHNICAL) {
+                    DOM.elid("passenger-flight-status").textContent = "Flight Status is delayed by technical difficulties";
+                }
+                if (event.returnValues.status == STATUS_CODE_LATE_OTHER) {
+                    DOM.elid("passenger-flight-status").textContent = "Flight Status is delayed by an extra ordinary reason";
+                }
+            }
         });
 
         // Builds the dropdown with all the available addresses for the airlines
@@ -74,10 +101,11 @@ import './flightsurety.css';
             });
         }
 
+        // fetches the default selected airline
         airlineSelected();
 
+        // We refresh the airline data whenever a new airline is selected
         DOM.elid('airline-select').addEventListener('change', () => {
-            console.log('on change called')
             airlineSelected();
         });
 
@@ -98,7 +126,7 @@ import './flightsurety.css';
 
         // Button select-airline is clicked
         DOM.elid('select-airline').addEventListener('click', () => {
-            // TODO:
+            airlineSelected();
         });
 
         // Button register airline is clicked
@@ -159,52 +187,42 @@ import './flightsurety.css';
             const passenger = DOM.elid("passenger-select").value;
             // Write transaction
             contract.getPassengerBalance(passenger, (error, result) => {
-                console.log(result);
                 DOM.elid("passenger-info").textContent = `Balance available for passenger: ${result}`;
             });
         });
+
+        DOM.elid('withdraw-balance').addEventListener('click', () => {
+            const passenger = DOM.elid("passenger-select").value;
+            // Write transaction
+            contract.withdraw(passenger, (error, result) => {
+                if (error) DOM.elid("passenger-info").textContent = error;
+                if (result)DOM.elid("passenger-info").textContent = `Balance withdrawn`;
+            });
+        });
+        
 
         // purchases an insurance
         DOM.elid('submit-purchase').addEventListener('click', () => {
             const airline = DOM.elid("airline-select").value;
             const passenger = DOM.elid("passenger-select").value;
             const index = DOM.elid('flight-select').value;
-            const flight = flights[index];
-            console.log(`flight: ${flight.timestamp}`);     
+            const flight = flights[index];    
             contract.purchaseInsurance(passenger, airline, flight.flight, flight.timestamp, (error, result) => {
-                if (error) DOM.elid("passenger-info").textContent = error;
-                if (result) DOM.elid("passenger-info").textContent = `Insurance for flight: ${flight.flight} was purchased`;
+                if (error) DOM.elid("passenger-flight-status").textContent = error;
+                if (result) DOM.elid("passenger-flight-status").textContent = `Insurance for flight: ${flight.flight} was purchased`;
             });
         });
 
         // User-submitted transaction
         DOM.elid('submit-oracle').addEventListener('click', () => {
-            let flight = DOM.elid('flight-number').value;
+            const airline = DOM.elid("airline-select").value;
+            const index = DOM.elid('flight-select').value;
+            const flightData = flights[index];
             // Write transaction
-            contract.fetchFlightStatus(flight, (error, result) => {
-                display('Oracles', 'Trigger oracles', [ { label: 'Fetch Flight Status', error: error, value: result.flight + ' ' + result.timestamp} ]);
+            contract.fetchFlightStatus(airline, flightData.flight, flightData.timestamp, (error, result) => {
+                if (error) console.log(error);
             });
         });
     });
 })();
-
-function display(title, description, results) {
-    let displayDiv = DOM.elid("display-wrapper");
-    let section = DOM.section();
-    section.appendChild(DOM.h2(title));
-    section.appendChild(DOM.h5(description));
-    results.map((result) => {
-        let row = section.appendChild(DOM.div({className:'row'}));
-        row.appendChild(DOM.div({className: 'col-sm-4 field'}, result.label));
-        row.appendChild(DOM.div({className: 'col-sm-8 field-value'}, result.error ? String(result.error) : String(result.value)));
-        section.appendChild(row);
-    })
-    displayDiv.append(section);
-}
-
-
-
-
-
-
 

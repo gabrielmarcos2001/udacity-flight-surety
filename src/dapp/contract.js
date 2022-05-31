@@ -12,12 +12,11 @@ export default class Contract {
         this.initialize(callback);
         this.airlines = [];
         this.passengers = [];
-        
     }
 
     initialize(callback) {
         this.web3.eth.getAccounts((error, accts) => {
-            self.owner = accts[0];
+            this.owner = accts[0];
             let counter = 1;
             // Uses first 5 addresses as airlines
             while(this.airlines.length < 5) {
@@ -70,6 +69,12 @@ export default class Contract {
         .on('data', function(event){
             callback(event);
         });
+        this.flightSuretyApp.events.FlightStatusInfo({}, function(error, event){ 
+            if (error) console.log(error);
+        })
+        .on('data', function(event){
+            callback(event);
+        });
     }
 
     getAirlineInfo(airline, callback) {
@@ -117,17 +122,15 @@ export default class Contract {
         self.flightSuretyApp.methods.getBalance().call({from: passenger, gas:1000000}, callback);
     }
 
-    fetchFlightStatus(flight, callback) {
+    withdraw(passenger, callback) {
         let self = this;
-        let payload = {
-            airline: self.airlines[0],
-            flight: flight,
-            timestamp: Math.floor(Date.now() / 1000)
-        } 
+        self.flightSuretyApp.methods.withdraw().send({from: passenger, gas:1000000}, callback);
+    }
+
+    fetchFlightStatus(airline, flight, timestamp, callback) {
+        let self = this;
         self.flightSuretyApp.methods
-            .fetchFlightStatus(payload.airline, payload.flight, payload.timestamp)
-            .send({ from: self.owner}, (error, result) => {
-                callback(error, payload);
-            });
+            .fetchFlightStatus(airline, flight, timestamp)
+            .send({ from: self.owner}, callback);
     }
 }

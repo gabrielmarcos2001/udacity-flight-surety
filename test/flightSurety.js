@@ -1,6 +1,5 @@
 
 var Test = require('../config/testConfig.js');
-var BigNumber = require('bignumber.js');
 
 contract('Flight Surety Tests', async (accounts) => {
 
@@ -86,7 +85,7 @@ contract('Flight Surety Tests', async (accounts) => {
     const airlineInfo = await config.flightSuretyApp.fetchAirline.call({from: airline1});
 
     assert.equal(airlineInfo[0], 'TangoAir01', 'Ariline name is invalid');
-    assert.equal(airlineInfo[1], 1, 'Ariline state is invalid');
+    assert.equal(airlineInfo[1], 2, 'Ariline state is invalid');
     assert.equal(airlineInfo[2], 'Approved', 'Ariline state name is invalid');
     assert.equal(airlineRegisterdEventEmitted, true, "Airline was not registered");
     assert.equal(airlineApprovedEventEmitted, true, "Airline was not approved");
@@ -121,7 +120,7 @@ contract('Flight Surety Tests', async (accounts) => {
     const airlineInfo = await config.flightSuretyApp.fetchAirline.call({from: airline2});
 
     assert.equal(airlineInfo[0], 'TangoAir02', 'Ariline name is invalid');
-    assert.equal(airlineInfo[1], 1, 'Ariline state is invalid');
+    assert.equal(airlineInfo[1], 2, 'Ariline state is invalid');
     assert.equal(airlineInfo[2], 'Approved', 'Ariline state name is invalid');
     assert.equal(airlineRegisterdEventEmitted, true, "Airline was not registered");
     assert.equal(airlineApprovedEventEmitted, true, "Airline was not approved");
@@ -145,7 +144,7 @@ contract('Flight Surety Tests', async (accounts) => {
     const airlineInfo = await config.flightSuretyApp.fetchAirline.call({from: airline3});
 
     assert.equal(airlineInfo[0], 'TangoAir03', 'Ariline name is invalid');
-    assert.equal(airlineInfo[1], 1, 'Ariline state is invalid');
+    assert.equal(airlineInfo[1], 2, 'Ariline state is invalid');
     assert.equal(airlineInfo[2], 'Approved', 'Ariline state name is invalid');
     assert.equal(airlineRegisterdEventEmitted, true, "Airline was not registered");
     assert.equal(airlineApprovedEventEmitted, true, "Airline was not approved");
@@ -169,7 +168,7 @@ contract('Flight Surety Tests', async (accounts) => {
     const airlineInfo = await config.flightSuretyApp.fetchAirline.call({from:airline4});
 
     assert.equal(airlineInfo[0], 'TangoAir04', 'Ariline name is invalid');
-    assert.equal(airlineInfo[1], 1, 'Ariline state is invalid');
+    assert.equal(airlineInfo[1], 2, 'Ariline state is invalid');
     assert.equal(airlineInfo[2], 'Approved', 'Ariline state name is invalid');
 
     assert.equal(airlineRegisterdEventEmitted, true, "Airline was not registered");
@@ -183,7 +182,7 @@ contract('Flight Surety Tests', async (accounts) => {
     const airlineInfo = await config.flightSuretyApp.fetchAirline.call({from: airline5});
 
     assert.equal(airlineInfo[0], 'TangoAir05', 'Ariline name is invalid');
-    assert.equal(airlineInfo[1], 0, 'Ariline state is invalid');
+    assert.equal(airlineInfo[1], 1, 'Ariline state is invalid');
     assert.equal(airlineInfo[2], 'Candidate', 'Ariline state name is invalid');
   });
 
@@ -194,7 +193,7 @@ contract('Flight Surety Tests', async (accounts) => {
     const airlineInfo = await config.flightSuretyApp.fetchAirline.call({from: airline6});
 
     assert.equal(airlineInfo[0], 'TangoAir06', 'Ariline name is invalid');
-    assert.equal(airlineInfo[1], 0, 'Ariline state is invalid');
+    assert.equal(airlineInfo[1], 1, 'Ariline state is invalid');
     assert.equal(airlineInfo[2], 'Candidate', 'Ariline state name is invalid');
   });
 
@@ -241,7 +240,7 @@ contract('Flight Surety Tests', async (accounts) => {
     // validates the funds were added to the data contract
     assert.equal(contractBalanceDiff, fundingPrice, "funding value was not added to the data contract");
     assert.equal(airlineInfo[0], 'TangoAir01', 'Ariline name is invalid');
-    assert.equal(airlineInfo[1], 2, 'Ariline state is invalid');
+    assert.equal(airlineInfo[1], 3, 'Ariline state is invalid');
     assert.equal(airlineInfo[2], 'Funded', 'Ariline state name is invalid');
     assert.equal(airlineFundedEventEmitted, true, "Airline was not funded");
   });
@@ -389,4 +388,30 @@ contract('Flight Surety Tests', async (accounts) => {
     }
     assert.equal(error.reason, 'insuree has no balance available to withdraw', "insuree has no balance available to withdraw");
   });
+
+  it('(insurance) credit insurance', async () => {
+    let balance = 0
+    let credit = web3.utils.toWei("1.5", "ether");
+    try {
+      await config.flightSuretyApp.creditInsurance(airline1, "flight01", flightTimeStamp);
+      balance = await config.flightSuretyApp.getAnyBalance.call(insuree1, {from: config.owner});
+    }catch (e) {
+      error = e;
+    }
+    assert.equal(balance, credit, "balance is wrong")
+  });
+
+  it('(insurance) withdraw with funds', async () => {
+    let insureeBalanceBefore = await web3.eth.getBalance(insuree1);
+    try {
+      await config.flightSuretyApp.withdraw({from: insuree1});
+    }catch (e) {
+      error = e;
+    }
+    let insureeBalanceAfter = await web3.eth.getBalance(insuree1);
+    let balanceDifference = insureeBalanceAfter - insureeBalanceBefore;
+    let difference = web3.utils.toWei("1.5", "ether");
+    assert(difference - balanceDifference < smallDifference, "insuree balance has not increaded")
+  });
+
 });

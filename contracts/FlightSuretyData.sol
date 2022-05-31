@@ -69,7 +69,7 @@ contract FlightSuretyData {
     constructor() public {
       contractOwner = msg.sender;
 
-      // by default the owner is also an authorized
+      // by default the owner is also an authorized contract
       authorizeContract(msg.sender);
     }
 
@@ -258,7 +258,7 @@ contract FlightSuretyData {
       contractOwner.transfer(msg.value);
 
       // Increments the balance available for the ariline
-      airlines[_address].balance.add(_amount);
+      airlines[_address].balance = airlines[_address].balance.add(_amount);
 
       return true;
     }
@@ -311,21 +311,17 @@ contract FlightSuretyData {
         Insurance storage insurance = insurances[keys[i]];
 
         // Validates the insurance amount has not been credited yet
-        if (insurance.state == InsuranceState.Submitted) {
+       if (insurance.state == InsuranceState.Submitted) {
           // updates the state of the insurance so it can not be credited again
           insurance.state = InsuranceState.Credited;
+
+          // Adds balance avaiable to withdraw to the insuree. An insuree can have balance from multiple insurances, so it acumulates
+          insureesBalance[insurance.insuree] = insureesBalance[insurance.insuree].add(insurance.insuranceAmount);
 
           // reduces the amount available for the airline - we could add a check
           // so we stop paying insurances if the airline has no more funds. In this case
           // we will end up with an airline with a negative balance
-          airlines[insurance.airline].balance.sub(
-            insurance.insuranceAmount
-          );
-
-          // adds the credit to the insuree so its available to withdraw
-          insureesBalance[insurance.insuree].add(
-            insurance.insuranceAmount
-          );
+          airlines[insurance.airline].balance = airlines[insurance.airline].balance.sub(insurance.insuranceAmount);
         }
       }
 
