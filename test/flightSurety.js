@@ -12,7 +12,7 @@ contract('Flight Surety Tests', async (accounts) => {
   var airline6;
   var insuree1;
 
-  var flightTimeStamp = Date.now();
+  var flightTimeStamp = 1654008867;
 
   const smallDifference = web3.utils.toWei("0.1", "ether");
   const insufficientFunding = web3.utils.toWei("1", "ether");
